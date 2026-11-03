@@ -1,0 +1,8 @@
+{
+  "place": "none",
+  "title": "自动命名 · pane",
+  "cloned_from": {
+    "name": "pane",
+    "version": "0.1.12"
+  }
+}

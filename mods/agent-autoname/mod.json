@@ -1,0 +1,9 @@
+{
+  "place": "none",
+  "title": "自动命名",
+  "overlay": {
+    "kind": "dialog",
+    "width": 720,
+    "height": 580
+  }
+}
