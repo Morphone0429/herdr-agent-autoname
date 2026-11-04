@@ -2,7 +2,7 @@ import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { agents, terminals, spaces, shared, setShared, props, appHome, exec, hc, readTextFile, writeTextFile, run, openOverlay, closeOverlay, theme, nextCommand } from "herdr";
 import { mkdir, unlink } from "fs/promises";
-import { agentKey, hasTaskText, isAgent, planTabName, reportedTitle, snapshotText } from "./engine.js";
+import { agentKey, hasTaskText, isAgent, planTabName, reportedTitle, sessionChanged, snapshotText } from "./engine.js";
 
 const STATE = "agent-autoname.state";
 const ENABLED = "agent-autoname.enabled";
@@ -109,7 +109,14 @@ export default class AgentAutoname extends View {
             if (record.title !== native || record.source !== "reported") this.storeAgent(agent.address, { ...record, title: native, source: "reported", updatedAt: now, error: null });
             continue;
           }
-          if (record.source === "reported") Object.assign(record, { title: "", source: "waiting", updatedAt: 0 });
+          const change = sessionChanged(agent, record);
+          if (change === "reset") Object.assign(record, { title: "", source: "waiting", updatedAt: 0, attemptedAt: 0, generatedTurn: null });
+          else if (change === "cleared") Object.assign(record, { title: "", source: "waiting", updatedAt: 0 });
+          // 新会话 turn=0 表示尚无用户输入；Pi 启动时的扩展检查不是任务，不据此生成标题。
+          if (!agent.turn) {
+            if (!previous || previous.key !== key) this.storeAgent(agent.address, record);
+            continue;
+          }
           const force = requested > (record.refreshedAt ?? 0);
           const changedTurn = agent.turn !== record.generatedTurn;
           const due = force || !record.title || (changedTurn && now - record.updatedAt >= this.config.refreshMs);

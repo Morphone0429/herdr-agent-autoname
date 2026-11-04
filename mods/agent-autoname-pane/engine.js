@@ -7,6 +7,8 @@
 
 const GENERIC = /^(?:pi|omp|claude(?: code)?|codex(?: cli)?|grok(?: build)?|opencode|gemini(?: cli)?|cursor(?: agent)?|amp(?: code)?|aider|goose|qwen(?: code)?|kilo(?: code)?|droid|agent|shell|terminal|new session|untitled|working|thinking|loading|connecting|idle|done|ready|busy|waiting)[.!… ]*$/i;
 
+const GENERIC_LAUNCH = /^(?:check(?:ing)?\s+(?:for\s+)?(?:extension|package|update|skill)|检查(?:扩展|技能|更新)|加载(?:技能|扩展|工具)|listing\s+(?:skills|extensions)|loading\s+(?:extensions?|skills?)|preparing\s+(?:tools?|agents?)|[\u2800-\u28ff]*\s*(?:updating|checking|loading|starting|initializing))/i;
+
 /** @param {string} value */
 export function cleanText(value) {
   return value.replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "")
@@ -79,7 +81,11 @@ export function snapshotText(screen, limit = 6000) {
 
 /** @param {string} screen */
 export function hasTaskText(screen) {
-  return cleanText(screen).length >= 30 && /[\p{L}\p{N}]/u.test(screen);
+  const text = cleanText(screen);
+  if (text.length < 8 || !/[\p{L}\p{N}]/u.test(screen)) return false;
+  // Pi 启动时会显示扩展检查与技能清单；这些不是用户任务。
+  const stripped = text.split(/\n/).filter(line => !GENERIC_LAUNCH.test(line)).join("\n");
+  return stripped.length >= 8;
 }
 
 /** @param {string} value */
@@ -117,6 +123,18 @@ export function reconcileTab(tab, record, programs, now) {
   if (record?.applied === tab.name) return record;
   if (!record && (programs.some(name => name.toLowerCase() === tab.name.toLowerCase()) || /^d+$/.test(tab.name) || /^(?:pi|omp|codex|claude(?: code)?|grok(?: build)?|opencode|gemini(?: cli)?|cursor(?: agent)?|agent|terminal|shell)$/i.test(tab.name))) return { mode: "auto", applied: null };
   return { mode: "manual" };
+}
+
+/**
+ * 检测同一终端内 Pi 会话重置（/new、/clear、/fork 后 turn 归零）或标题被移除。
+ * @param {Agent} agent
+ * @param {{generatedTurn?: number | null, source?: string, title?: string}} record
+ * @returns {"reset" | "cleared" | null}
+ */
+export function sessionChanged(agent, record) {
+  if (record?.generatedTurn != null && agent?.turn != null && agent.turn < record.generatedTurn) return "reset";
+  if (record?.source === "reported" && !reportedTitle(agent ?? {})) return "cleared";
+  return null;
 }
 
 /**
